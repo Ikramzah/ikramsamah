@@ -20,7 +20,10 @@ class Portefeuille:
     # le solde des liquidités du portefeuille à la date spécifiée
 
     def acheter(self, symbole, quantité, date):
-        if quantité > 
+        if quantité
+
+
+    def vendre(symbole, quantité, date)
 
 
 
