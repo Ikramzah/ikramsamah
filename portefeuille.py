@@ -1,118 +1,135 @@
-<<<<<<< HEAD
 import datetime
-from ikramsamah.exceptions import ErreurDate, ErreurQuantité, LiquiditéInsuffisante
+from bourse import Bourse
+from exceptions import ErreurDate, ErreurQuantité, LiquiditéInsuffisante
 
 class Portefeuille:
-    def __init__(self, bourse):
+    def __init__(self, bourse):   #initiation
         self.bourse = bourse
-        self.liquidites = 0
-        self.transactions = []  # initiation
+        self.transactions = []  
+        self.solde_liquide = 0
+        self.positions = {}
 
-    def déposer(self, montant, date=None):
+    def deposer(self, montant, date=None):  #dépot des liquidités
         if date is None:
             date = datetime.date.today()
 
         if date > datetime.date.today():
-            raise ErreurDate("La date futur n'est pas autorisée pour un dépôt")
+            raise ErreurDate("La date de dépôt ne peut pas être future.")
 
-        self.liquidites += montant
-        self.transactions.append((date, f"le dépôt de ${montant: .2f}"))
+        self.solde_liquide += montant
+        self.transactions.append((date, 'DEPOT', montant))
 
-    def solde(self, date=None):
-        date = date or datetime.date.today()
-        return self.liquidites
+    def solde(self, date=None):  
+        if date is None:
+            date = datetime.date.today()
 
-    def acheter(self, symbole, quantité, date=None):
-        date = date or datetime.date.today()
-        prix_unitaire = self.bourse.prix(symbole, date)
-        cout_total = prix_unitaire * quantité
+        if date > datetime.date.today():
+            raise ErreurDate("La date d'évaluation ne peut pas être future.")
 
-        self._verifier_liquidites_suffisantes(cout_total)
+        solde = self.solde_liquide
+        for transaction_date, transaction_type, montant in self.transactions:
+            if transaction_date <= date:
+                if transaction_type == 'ACHAT':
+                    symbole = montant[0]
+                    prix = self.bourse.prix(symbole, transaction_date)
+                    solde -= prix * montant[1]  
+                elif transaction_type == 'VENTE':
+                    symbole = montant[0]
+                    prix = self.bourse.prix(symbole, transaction_date)
+                    solde += prix * montant[1]  
 
-        self.liquidites -= cout_total
-        self.transactions.append((date, f"Achat de {quantité} actions de {symbole}"))
+        return solde
 
-    def vendre(self, symbole, quantité, date=None):
-        date = date or datetime.date.today()
-        prix_unitaire = self.bourse.prix(symbole, date)
-        gain_total = prix_unitaire * quantité
+    def acheter(self, symbole, quantite, date=None):
+        if date is None:
+            date = datetime.date.today()
 
-        self._verifier_quantite_suffisante(symbole, quantité, date)
+        if date > datetime.date.today():
+            raise ErreurDate("La date d'achat ne peut pas être future.")
 
-        self.liquidites += gain_total
-        self.transactions.append((date, f"Vente de {quantité} actions de {symbole}"))
+        prix = self.bourse.prix(symbole, date)
+        cout_total = prix * quantite
+
+        if cout_total > self.solde_liquide:
+            raise LiquiditéInsuffisante("Solde liquide insuffisant pour acheter ces actions.")
+
+        self.solde_liquide -= cout_total
+        if symbole in self.positions:
+            self.positions[symbole] += quantite
+        else:
+            self.positions[symbole] = quantite
+
+        self.transactions.append((date, 'ACHAT', (symbole, quantite)))
+
+    def vendre(self, symbole, quantite, date=None):
+        if date is None:
+            date = datetime.date.today()
+
+        if date > datetime.date.today():
+            raise ErreurDate("La date de vente ne peut pas être future.")
+
+        if symbole not in self.positions or self.positions[symbole] < quantite:
+            raise ErreurQuantité(f"Quantité insuffisante de {symbole} pour la vente.")
+
+        prix = self.bourse.prix(symbole, date)
+        produit_total = prix * quantite
+
+        self.solde_liquide += produit_total
+        self.positions[symbole] -= quantite
+
+        self.transactions.append((date, 'VENTE', (symbole, quantite)))
 
     def valeur_totale(self, date=None):
-        date = date or datetime.date.today()
+        if date is None:
+            date = datetime.date.today()
 
-        total_liquidites = self.liquidites
-        total_titres = sum(self.bourse.prix(symbole, date) * self.get_quantite(symbole, date)
-                           for symbole in self.get_symboles_titres(date))
+        if date > datetime.date.today():
+            raise ErreurDate("La date d'évaluation ne peut pas être future.")
 
-        return total_liquidites + total_titres
+        total = self.solde(date)
+        for symbole, quantite in self.positions.items():
+            prix = self.bourse.prix(symbole, date)
+            total += prix * quantite
+
+        return total
 
     def valeur_des_titres(self, symboles, date=None):
-        date = date or datetime.date.today()
-        return sum(self.bourse.prix(symbole, date) * self.get_quantite(symbole, date) for symbole in symboles)
+        if date is None:
+            date = datetime.date.today()
+
+        if date > datetime.date.today():
+            raise ErreurDate("La date d'évaluation ne peut pas être future.")
+
+        total = 0
+        for symbole in symboles:
+            if symbole in self.positions:
+                prix = self.bourse.prix(symbole, date)
+                total += prix * self.positions[symbole]
+
+        return total
 
     def titres(self, date=None):
-        date = date or datetime.date.today()
-        return {symbole: self.get_quantite(symbole, date) for symbole in self.get_symboles_titres(date)}
+        if date is None:
+            date = datetime.date.today()
+
+        if date > datetime.date.today():
+            raise ErreurDate("La date d'évaluation ne peut pas être future.")
+
+        titres = {}
+        for symbole, quantite in self.positions.items():
+            if quantite > 0:
+                titres[symbole] = quantite
+
+        return titres
 
     def valeur_projetee(self, date, rendement):
-        # Logique pour projeter la valeur du portefeuille à une date future avec le rendement spécifié
-        pass
+        if date <= datetime.date.today():
+            raise ErreurDate("La date projetée doit être future.")
 
-    def get_quantite(self, symbole, date):
-        # Méthode utilitaire pour obtenir la quantité d'actions d'un titre à une date spécifiée
-        pass
+        valeur_projetee = self.valeur_totale()
+        for symbole, quantite in self.positions.items():
+            rendement_titre = rendement.get(symbole, 0)
+            prix = self.bourse.prix(symbole, date)
+            valeur_projetee += quantite * prix * (1 + rendement_titre / 100) ** (date.year - datetime.date.today().year)
 
-    def _verifier_liquidites_suffisantes(self, montant):
-        if montant > self.liquidites:
-            raise LiquiditéInsuffisante("Liquidités insuffisantes pour effectuer cette transaction")
-
-    def _verifier_quantite_suffisante(self, symbole, quantité, date):
-        quantite_actuelle = self.get_quantite(symbole, date)
-        if quantité > quantite_actuelle:
-            raise ErreurQuantité(f"Quantité insuffisante de {symbole} à vendre")
-
-    def get_symboles_titres(self, date):
-        # Méthode utilitaire pour obtenir les symboles de tous les titres du portefeuille à une date spécifiée
-        pass
-=======
-import datetime 
-
-
-
-class Portefeuille:
-    
-    def __init__(self, bourse1): 
-        self.bourse1 = bourse1
-
-    def déposer(self, montant, date):
-       date = date("La date de transaction:", self.year, self.day, self.month)
-       montant = type(float) + ' ' + '$'
-       return f"'dépot du montant', {montant}, 'le', {date}" 
-    # effectue le dépôt du montant liquide dans le portefeuille à la date spécifiée
-   
-    def solde(self, date):
-        date_devaluation = date(self.day)
-        historique = {}
-        return date_devaluation() 
-    # le solde des liquidités du portefeuille à la date spécifiée
-
-    def acheter(self, symbole, quantité, date):
-        if quantité
-
-
-    def vendre(symbole, quantité, date)
-
-
-
-
-
-
-
-
-     #l'achat de la quantité d'actions du titre symbole à la date spécifiée"
->>>>>>> ec0b9eb2d81bd65eae60388297992b53038e7cc3
+        return valeur_projetee
